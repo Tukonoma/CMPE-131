@@ -3,6 +3,8 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
+/// Nutrient and Calorie Tracker
+
 void main() => runApp(const NavigationBarApp());
 
 class NavigationBarApp extends StatelessWidget {
@@ -208,11 +210,15 @@ class _NavigationExampleState extends State<NavigationExample> {
           theme: theme,
           selectedDay: _selectedDay,
           onPickDay: _pickDay,
+        ),
+        AddMealPage(
+          onAddMeal: _addMeal,
+          mealsForDay: mealsForDay,
+          selectedDay: _selectedDay,
           onDeleteMeal: _deleteMeal,
           onEditMeal: _updateMeal,
           onClearAllForDay: _clearMealsForSelectedDay,
         ),
-        AddMealPage(onAddMeal: _addMeal),
         const Padding(
           padding: EdgeInsets.all(8.0),
           child: Column(
@@ -244,18 +250,12 @@ class _HomePage extends StatelessWidget {
   final ThemeData theme;
   final DateTime selectedDay;
   final VoidCallback onPickDay;
-  final void Function(Meal meal) onDeleteMeal;
-  final void Function(Meal oldMeal, Meal updatedMeal) onEditMeal;
-  final VoidCallback onClearAllForDay;
 
   const _HomePage({
     required this.mealsForDay,
     required this.theme,
     required this.selectedDay,
     required this.onPickDay,
-    required this.onDeleteMeal,
-    required this.onEditMeal,
-    required this.onClearAllForDay,
   });
 
   double _sum(double? Function(Meal m) pick) {
@@ -265,127 +265,6 @@ class _HomePage extends StatelessWidget {
       if (v != null) total += v;
     }
     return total;
-  }
-
-  Future<void> _showEditDialog(BuildContext context, Meal meal) async {
-    final nameCtrl = TextEditingController(text: meal.name);
-    final gramsCtrl = TextEditingController(text: _formatNumber(meal.grams));
-    final kcalCtrl =
-    TextEditingController(text: meal.kcal100g?.toString() ?? '');
-    final proteinCtrl =
-    TextEditingController(text: meal.protein100g?.toString() ?? '');
-    final carbsCtrl =
-    TextEditingController(text: meal.carbs100g?.toString() ?? '');
-    final fatCtrl =
-    TextEditingController(text: meal.fat100g?.toString() ?? '');
-
-    double? parseOrNull(String s) {
-      final t = s.trim();
-      if (t.isEmpty) return null;
-      return double.tryParse(t);
-    }
-
-    final updated = await showDialog<Meal>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit entry'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: gramsCtrl,
-                keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Grams eaten',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: kcalCtrl,
-                keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Calories (kcal per 100g)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: proteinCtrl,
-                keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Protein (g per 100g)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: carbsCtrl,
-                keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Carbs (g per 100g)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextField(
-                controller: fatCtrl,
-                keyboardType:
-                const TextInputType.numberWithOptions(decimal: true),
-                decoration: const InputDecoration(
-                  labelText: 'Fat (g per 100g)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final newName = nameCtrl.text.trim();
-              final grams = double.tryParse(gramsCtrl.text.trim());
-
-              if (newName.isEmpty || grams == null || grams <= 0) return;
-
-              Navigator.pop(
-                ctx,
-                meal.copyWith(
-                  name: newName,
-                  grams: grams,
-                  kcal100g: parseOrNull(kcalCtrl.text),
-                  protein100g: parseOrNull(proteinCtrl.text),
-                  carbs100g: parseOrNull(carbsCtrl.text),
-                  fat100g: parseOrNull(fatCtrl.text),
-                ),
-              );
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-
-    if (updated != null) {
-      onEditMeal(meal, updated);
-    }
   }
 
   @override
@@ -451,119 +330,9 @@ class _HomePage extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Text('${mealsForDay.length} item(s)'),
-                    const Spacer(),
-                    TextButton.icon(
-                      onPressed: mealsForDay.isEmpty
-                          ? null
-                          : () async {
-                        final ok = await showDialog<bool>(
-                          context: context,
-                          builder: (ctx) => AlertDialog(
-                            title: const Text('Clear this day?'),
-                            content: Text(
-                              'This will delete all entries for ${_dayLabel(selectedDay)}.',
-                            ),
-                            actions: [
-                              TextButton(
-                                onPressed: () =>
-                                    Navigator.pop(ctx, false),
-                                child: const Text('Cancel'),
-                              ),
-                              ElevatedButton(
-                                onPressed: () =>
-                                    Navigator.pop(ctx, true),
-                                child: const Text('Delete all'),
-                              ),
-                            ],
-                          ),
-                        ) ??
-                            false;
-
-                        if (ok) onClearAllForDay();
-                      },
-                      icon: const Icon(Icons.delete_forever_outlined),
-                      label: const Text('Clear day'),
-                    ),
-                  ],
-                ),
+                Text('${mealsForDay.length} item(s)'),
               ],
             ),
-          ),
-        ),
-        Expanded(
-          child: mealsForDay.isEmpty
-              ? Center(
-            child: Text(
-              'No meals for this date.\nAdd meals in "Add a meal".',
-              textAlign: TextAlign.center,
-              style: theme.textTheme.titleMedium,
-            ),
-          )
-              : ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            itemCount: mealsForDay.length,
-            itemBuilder: (context, i) {
-              final m = mealsForDay[i];
-
-              return Dismissible(
-                key: ValueKey('${m.name}-${m.addedAt.toIso8601String()}-$i'),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 16),
-                  child: const Icon(Icons.delete),
-                ),
-                confirmDismiss: (_) async {
-                  return await showDialog<bool>(
-                    context: context,
-                    builder: (ctx) => AlertDialog(
-                      title: const Text('Delete entry?'),
-                      content: Text("Delete '${m.name}'?"),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(ctx, false),
-                          child: const Text('Cancel'),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => Navigator.pop(ctx, true),
-                          child: const Text('Delete'),
-                        ),
-                      ],
-                    ),
-                  ) ??
-                      false;
-                },
-                onDismissed: (_) => onDeleteMeal(m),
-                child: Card(
-                  child: ListTile(
-                    onTap: () => _showEditDialog(context, m),
-                    title: Text(m.name),
-                    subtitle: Text([
-                      if (m.brand != null && m.brand!.trim().isNotEmpty)
-                        'Brand: ${m.brand}',
-                      'Grams: ${_formatNumber(m.grams)}g',
-                      if (m.kcal != null)
-                        'Calories: ${_formatNumber(m.kcal!, decimals: 0)}',
-                      if (m.protein != null)
-                        'P: ${m.protein!.toStringAsFixed(1)}g',
-                      if (m.carbs != null)
-                        'C: ${m.carbs!.toStringAsFixed(1)}g',
-                      if (m.fat != null)
-                        'F: ${m.fat!.toStringAsFixed(1)}g',
-                      'Tap to edit',
-                    ].join(' • ')),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.delete_outline),
-                      onPressed: () => onDeleteMeal(m),
-                      tooltip: 'Delete',
-                    ),
-                  ),
-                ),
-              );
-            },
           ),
         ),
       ],
@@ -596,8 +365,21 @@ class _StatChip extends StatelessWidget {
 
 class AddMealPage extends StatefulWidget {
   final void Function(Meal) onAddMeal;
+  final List<Meal> mealsForDay;
+  final DateTime selectedDay;
+  final void Function(Meal meal) onDeleteMeal;
+  final void Function(Meal oldMeal, Meal updatedMeal) onEditMeal;
+  final VoidCallback onClearAllForDay;
 
-  const AddMealPage({super.key, required this.onAddMeal});
+  const AddMealPage({
+    super.key,
+    required this.onAddMeal,
+    required this.mealsForDay,
+    required this.selectedDay,
+    required this.onDeleteMeal,
+    required this.onEditMeal,
+    required this.onClearAllForDay,
+  });
 
   @override
   State<AddMealPage> createState() => _AddMealPageState();
@@ -770,17 +552,262 @@ class _AddMealPageState extends State<AddMealPage> {
     );
   }
 
+  Future<void> _showEditDialog(BuildContext context, Meal meal) async {
+    final nameCtrl = TextEditingController(text: meal.name);
+    final gramsCtrl = TextEditingController(text: _formatNumber(meal.grams));
+    final kcalCtrl =
+    TextEditingController(text: meal.kcal100g?.toString() ?? '');
+    final proteinCtrl =
+    TextEditingController(text: meal.protein100g?.toString() ?? '');
+    final carbsCtrl =
+    TextEditingController(text: meal.carbs100g?.toString() ?? '');
+    final fatCtrl =
+    TextEditingController(text: meal.fat100g?.toString() ?? '');
+
+    double? parseOrNull(String s) {
+      final t = s.trim();
+      if (t.isEmpty) return null;
+      return double.tryParse(t);
+    }
+
+    final updated = await showDialog<Meal>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Edit entry'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: gramsCtrl,
+                keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Grams eaten',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: kcalCtrl,
+                keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Calories (kcal per 100g)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: proteinCtrl,
+                keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Protein (g per 100g)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: carbsCtrl,
+                keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Carbs (g per 100g)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: fatCtrl,
+                keyboardType:
+                const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(
+                  labelText: 'Fat (g per 100g)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final newName = nameCtrl.text.trim();
+              final grams = double.tryParse(gramsCtrl.text.trim());
+
+              if (newName.isEmpty || grams == null || grams <= 0) return;
+
+              Navigator.pop(
+                ctx,
+                meal.copyWith(
+                  name: newName,
+                  grams: grams,
+                  kcal100g: parseOrNull(kcalCtrl.text),
+                  protein100g: parseOrNull(proteinCtrl.text),
+                  carbs100g: parseOrNull(carbsCtrl.text),
+                  fat100g: parseOrNull(fatCtrl.text),
+                ),
+              );
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (updated != null) {
+      widget.onEditMeal(meal, updated);
+    }
+  }
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
   }
 
+  Widget _buildTodaysFoodList(BuildContext context) {
+    final mealsForDay = widget.mealsForDay;
+
+    if (mealsForDay.isEmpty) {
+      return Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Text(
+            'No meals for this date yet.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        Row(
+          children: [
+            Text(
+              'Foods for ${_dayLabel(widget.selectedDay)}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const Spacer(),
+            TextButton.icon(
+              onPressed: () async {
+                final ok = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Clear this day?'),
+                    content: Text(
+                      'This will delete all entries for ${_dayLabel(widget.selectedDay)}.',
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Delete all'),
+                      ),
+                    ],
+                  ),
+                ) ??
+                    false;
+
+                if (ok) widget.onClearAllForDay();
+              },
+              icon: const Icon(Icons.delete_forever_outlined),
+              label: const Text('Clear day'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: mealsForDay.length,
+          itemBuilder: (context, i) {
+            final m = mealsForDay[i];
+
+            return Dismissible(
+              key: ValueKey('${m.name}-${m.addedAt.toIso8601String()}-$i'),
+              direction: DismissDirection.endToStart,
+              background: Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 16),
+                child: const Icon(Icons.delete),
+              ),
+              confirmDismiss: (_) async {
+                return await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    title: const Text('Delete entry?'),
+                    content: Text("Delete '${m.name}'?"),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                      ElevatedButton(
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Delete'),
+                      ),
+                    ],
+                  ),
+                ) ??
+                    false;
+              },
+              onDismissed: (_) => widget.onDeleteMeal(m),
+              child: Card(
+                child: ListTile(
+                  onTap: () => _showEditDialog(context, m),
+                  title: Text(m.name),
+                  subtitle: Text([
+                    if (m.brand != null && m.brand!.trim().isNotEmpty)
+                      'Brand: ${m.brand}',
+                    'Grams: ${_formatNumber(m.grams)}g',
+                    if (m.kcal != null)
+                      'Calories: ${_formatNumber(m.kcal!, decimals: 0)}',
+                    if (m.protein != null)
+                      'P: ${m.protein!.toStringAsFixed(1)}g',
+                    if (m.carbs != null)
+                      'C: ${m.carbs!.toStringAsFixed(1)}g',
+                    if (m.fat != null)
+                      'F: ${m.fat!.toStringAsFixed(1)}g',
+                    'Tap to edit',
+                  ].join(' • ')),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => widget.onDeleteMeal(m),
+                    tooltip: 'Delete',
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(12),
-      child: Column(
+      child: ListView(
         children: [
           Row(
             children: [
@@ -813,8 +840,10 @@ class _AddMealPageState extends State<AddMealPage> {
           if (!_loading && _error == null && _results.isEmpty)
             const Text('Search for something to see results.'),
           const SizedBox(height: 8),
-          Expanded(
-            child: ListView.builder(
+          if (_results.isNotEmpty)
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               itemCount: _results.length,
               itemBuilder: (context, i) {
                 final f = _results[i];
@@ -842,7 +871,8 @@ class _AddMealPageState extends State<AddMealPage> {
                 );
               },
             ),
-          ),
+          const SizedBox(height: 16),
+          _buildTodaysFoodList(context),
         ],
       ),
     );
