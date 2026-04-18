@@ -1,9 +1,10 @@
 import 'dart:convert';
+import 'dart:math' as math;
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-
-/// Nutrient and Calorie Tracker
+import 'package:intl/intl.dart';
 
 void main() => runApp(const NavigationBarApp());
 
@@ -82,34 +83,64 @@ class Meal {
 bool _isSameDay(DateTime a, DateTime b) =>
     a.year == b.year && a.month == b.month && a.day == b.day;
 
-String _weekdayName(int weekday) {
-  switch (weekday) {
-    case DateTime.monday:
-      return 'Monday';
-    case DateTime.tuesday:
-      return 'Tuesday';
-    case DateTime.wednesday:
-      return 'Wednesday';
-    case DateTime.thursday:
-      return 'Thursday';
-    case DateTime.friday:
-      return 'Friday';
-    case DateTime.saturday:
-      return 'Saturday';
-    case DateTime.sunday:
-      return 'Sunday';
-    default:
-      return '';
-  }
-}
+DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
-String _dayLabel(DateTime d) => '${_weekdayName(d.weekday)} ${d.month}/${d.day}';
+DateTime _startOfWeek(DateTime d) {
+  final date = _dateOnly(d);
+  return date.subtract(Duration(days: date.weekday - 1));
+}
 
 String _formatNumber(double value, {int decimals = 1}) {
   if (value == value.roundToDouble()) {
     return value.toStringAsFixed(0);
   }
   return value.toStringAsFixed(decimals);
+}
+
+enum ProgressMetric {
+  calories,
+  protein,
+  carbs,
+  fat,
+}
+
+extension ProgressMetricX on ProgressMetric {
+  String get label {
+    switch (this) {
+      case ProgressMetric.calories:
+        return 'Calories';
+      case ProgressMetric.protein:
+        return 'Protein';
+      case ProgressMetric.carbs:
+        return 'Carbs';
+      case ProgressMetric.fat:
+        return 'Fat';
+    }
+  }
+
+  String get unit {
+    switch (this) {
+      case ProgressMetric.calories:
+        return 'kcal';
+      case ProgressMetric.protein:
+      case ProgressMetric.carbs:
+      case ProgressMetric.fat:
+        return 'g';
+    }
+  }
+
+  double valueFromMeal(Meal meal) {
+    switch (this) {
+      case ProgressMetric.calories:
+        return meal.kcal ?? 0.0;
+      case ProgressMetric.protein:
+        return meal.protein ?? 0.0;
+      case ProgressMetric.carbs:
+        return meal.carbs ?? 0.0;
+      case ProgressMetric.fat:
+        return meal.fat ?? 0.0;
+    }
+  }
 }
 
 class NavigationExample extends StatefulWidget {
@@ -125,13 +156,16 @@ class _NavigationExampleState extends State<NavigationExample> {
   final List<Meal> _meals = [];
   DateTime _selectedDay = DateTime.now();
 
+  final double _calorieGoal = 2000.0;
+
+  ProgressMetric _selectedMetric = ProgressMetric.calories;
+  int _progressWindowOffset = 0;
+
   void _addMeal(Meal meal) {
     setState(() => _meals.insert(0, meal));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          'Added: ${meal.name} (${_formatNumber(meal.grams)}g)',
-        ),
+        content: Text('Added: ${meal.name} (${_formatNumber(meal.grams)}g)'),
       ),
     );
   }
@@ -187,14 +221,11 @@ class _NavigationExampleState extends State<NavigationExample> {
             label: 'Home',
           ),
           NavigationDestination(
-            icon: Badge(child: Icon(Icons.add)),
+            icon: Icon(Icons.add),
             label: 'Add a meal',
           ),
           NavigationDestination(
-            icon: Badge(
-              label: Text('2'),
-              child: Icon(Icons.data_thresholding_outlined),
-            ),
+            icon: Icon(Icons.data_thresholding_outlined),
             label: 'Progression',
           ),
         ],
@@ -205,61 +236,65 @@ class _NavigationExampleState extends State<NavigationExample> {
         foregroundColor: Colors.white,
       ),
       body: <Widget>[
-        _HomePage(
+        HomePage(
           mealsForDay: mealsForDay,
           theme: theme,
           selectedDay: _selectedDay,
+          calorieGoal: _calorieGoal,
           onPickDay: _pickDay,
-        ),
-        AddMealPage(
-          onAddMeal: _addMeal,
-          mealsForDay: mealsForDay,
-          selectedDay: _selectedDay,
           onDeleteMeal: _deleteMeal,
           onEditMeal: _updateMeal,
           onClearAllForDay: _clearMealsForSelectedDay,
         ),
-        const Padding(
-          padding: EdgeInsets.all(8.0),
-          child: Column(
-            children: <Widget>[
-              Card(
-                child: ListTile(
-                  leading: Icon(Icons.notifications_sharp),
-                  title: Text('Notification 1'),
-                  subtitle: Text('This is a notification'),
-                ),
-              ),
-              Card(
-                child: ListTile(
-                  leading: Icon(Icons.notifications_sharp),
-                  title: Text('Notification 2'),
-                  subtitle: Text('This is a notification'),
-                ),
-              ),
-            ],
-          ),
+        AddMealPage(
+          onAddMeal: _addMeal,
+          selectedDay: _selectedDay,
+        ),
+        ProgressionPage(
+          meals: _meals,
+          selectedMetric: _selectedMetric,
+          windowOffset: _progressWindowOffset,
+          onMetricChanged: (metric) {
+            setState(() => _selectedMetric = metric);
+          },
+          onPreviousWindow: () {
+            setState(() => _progressWindowOffset++);
+          },
+          onNextWindow: () {
+            if (_progressWindowOffset > 0) {
+              setState(() => _progressWindowOffset--);
+            }
+          },
         ),
       ][currentPageIndex],
     );
   }
 }
 
-class _HomePage extends StatelessWidget {
+class HomePage extends StatelessWidget {
   final List<Meal> mealsForDay;
   final ThemeData theme;
   final DateTime selectedDay;
+  final double calorieGoal;
   final VoidCallback onPickDay;
+  final void Function(Meal meal) onDeleteMeal;
+  final void Function(Meal oldMeal, Meal updatedMeal) onEditMeal;
+  final VoidCallback onClearAllForDay;
 
-  const _HomePage({
+  const HomePage({
+    super.key,
     required this.mealsForDay,
     required this.theme,
     required this.selectedDay,
+    required this.calorieGoal,
     required this.onPickDay,
+    required this.onDeleteMeal,
+    required this.onEditMeal,
+    required this.onClearAllForDay,
   });
 
   double _sum(double? Function(Meal m) pick) {
-    double total = 0;
+    double total = 0.0;
     for (final m in mealsForDay) {
       final v = pick(m);
       if (v != null) total += v;
@@ -267,289 +302,8 @@ class _HomePage extends StatelessWidget {
     return total;
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final totalKcal = _sum((m) => m.kcal);
-    final totalProtein = _sum((m) => m.protein);
-    final totalCarbs = _sum((m) => m.carbs);
-    final totalFat = _sum((m) => m.fat);
-
-    return Column(
-      children: [
-        Card(
-          margin: const EdgeInsets.all(8),
-          child: Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                InkWell(
-                  onTap: onPickDay,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Row(
-                      children: [
-                        Text(
-                          _dayLabel(selectedDay),
-                          style: theme.textTheme.titleLarge,
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.calendar_month_outlined),
-                        const Spacer(),
-                        const Icon(Icons.arrow_drop_down),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 8,
-                  children: [
-                    _StatChip(
-                      label: 'Calories',
-                      value: totalKcal,
-                      unit: 'kcal',
-                    ),
-                    _StatChip(
-                      label: 'Protein',
-                      value: totalProtein,
-                      unit: 'g',
-                    ),
-                    _StatChip(
-                      label: 'Carbs',
-                      value: totalCarbs,
-                      unit: 'g',
-                    ),
-                    _StatChip(
-                      label: 'Fat',
-                      value: totalFat,
-                      unit: 'g',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text('${mealsForDay.length} item(s)'),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _StatChip extends StatelessWidget {
-  final String label;
-  final double value;
-  final String unit;
-
-  const _StatChip({
-    required this.label,
-    required this.value,
-    required this.unit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Chip(
-      label: Text('$label: ${value.toStringAsFixed(1)} $unit'),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Add Meal Page — powered by USDA FoodData Central API
-// ---------------------------------------------------------------------------
-
-class AddMealPage extends StatefulWidget {
-  final void Function(Meal) onAddMeal;
-  final List<Meal> mealsForDay;
-  final DateTime selectedDay;
-  final void Function(Meal meal) onDeleteMeal;
-  final void Function(Meal oldMeal, Meal updatedMeal) onEditMeal;
-  final VoidCallback onClearAllForDay;
-
-  const AddMealPage({
-    super.key,
-    required this.onAddMeal,
-    required this.mealsForDay,
-    required this.selectedDay,
-    required this.onDeleteMeal,
-    required this.onEditMeal,
-    required this.onClearAllForDay,
-  });
-
-  @override
-  State<AddMealPage> createState() => _AddMealPageState();
-}
-
-class _AddMealPageState extends State<AddMealPage> {
-  final _controller = TextEditingController();
-  bool _loading = false;
-  String? _error;
-  List<_UsdaFood> _results = const [];
-
-  static const _apiKey = 'ZrNhpjOTyWKFMWxLIp4f0mCz0gAqG0bPBRjRq24Z';
-
-  static final List<int> _gramOptions =
-  List<int>.generate(200, (index) => (index + 1) * 10);
-
-  Future<void> _search() async {
-    final q = _controller.text.trim();
-    if (q.isEmpty) return;
-
-    setState(() {
-      _loading = true;
-      _error = null;
-      _results = const [];
-    });
-
-    try {
-      final uri =
-      Uri.parse('https://api.nal.usda.gov/fdc/v1/foods/search').replace(
-        queryParameters: <String, String>{
-          'query': q,
-          'api_key': _apiKey,
-          'pageSize': '20',
-        },
-      );
-
-      final resp = await http.get(
-        uri,
-        headers: const {'Accept': 'application/json'},
-      );
-
-      if (resp.statusCode != 200) {
-        throw Exception('HTTP ${resp.statusCode}: ${resp.body}');
-      }
-
-      final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
-      final foods = (decoded['foods'] as List?) ?? const [];
-
-      final parsed = foods
-          .map((f) => _UsdaFood.fromJson(f as Map<String, dynamic>))
-          .where((f) => f.description.trim().isNotEmpty)
-          .toList();
-
-      setState(() => _results = parsed);
-    } catch (e) {
-      setState(() => _error = 'Search failed: $e');
-    } finally {
-      setState(() => _loading = false);
-    }
-  }
-
-  Future<void> _addFromResult(_UsdaFood f) async {
-    final grams = await _showGramPicker(context, food: f);
-    if (grams == null) return;
-
-    final meal = Meal(
-      name: f.description,
-      brand: f.brandOwner,
-      barcode: f.gtinUpc,
-      grams: grams,
-      kcal100g: f.kcal100g,
-      protein100g: f.protein100g,
-      carbs100g: f.carbs100g,
-      fat100g: f.fat100g,
-      addedAt: DateTime.now(),
-    );
-
-    widget.onAddMeal(meal);
-  }
-
-  Future<double?> _showGramPicker(
-      BuildContext context, {
-        required _UsdaFood food,
-      }) async {
-    int selectedIndex = 9;
-    final manualCtrl = TextEditingController(text: '100');
-
-    return showModalBottomSheet<double>(
-      context: context,
-      isScrollControlled: true,
-      builder: (sheetCtx) {
-        return Padding(
-          padding: EdgeInsets.only(
-            left: 16,
-            right: 16,
-            top: 16,
-            bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 16,
-          ),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  food.description,
-                  style: Theme.of(sheetCtx).textTheme.titleMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  'Choose grams',
-                  style: Theme.of(sheetCtx).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: 12),
-                SizedBox(
-                  height: 180,
-                  child: CupertinoPicker(
-                    scrollController: FixedExtentScrollController(
-                      initialItem: selectedIndex,
-                    ),
-                    itemExtent: 36,
-                    useMagnifier: true,
-                    magnification: 1.05,
-                    onSelectedItemChanged: (index) {
-                      selectedIndex = index;
-                      manualCtrl.text = _gramOptions[index].toString();
-                    },
-                    children: _gramOptions
-                        .map((g) => Center(child: Text('$g g')))
-                        .toList(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: manualCtrl,
-                  keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Or type grams',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextButton(
-                        onPressed: () => Navigator.pop(sheetCtx),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          final grams =
-                          double.tryParse(manualCtrl.text.trim());
-                          if (grams == null || grams <= 0) return;
-                          Navigator.pop(sheetCtx, grams);
-                        },
-                        child: const Text('Add'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  String _getFormattedDate() {
+    return DateFormat('EEEE, MMMM d').format(selectedDay);
   }
 
   Future<void> _showEditDialog(BuildContext context, Meal meal) async {
@@ -561,8 +315,7 @@ class _AddMealPageState extends State<AddMealPage> {
     TextEditingController(text: meal.protein100g?.toString() ?? '');
     final carbsCtrl =
     TextEditingController(text: meal.carbs100g?.toString() ?? '');
-    final fatCtrl =
-    TextEditingController(text: meal.fat100g?.toString() ?? '');
+    final fatCtrl = TextEditingController(text: meal.fat100g?.toString() ?? '');
 
     double? parseOrNull(String s) {
       final t = s.trim();
@@ -669,8 +422,753 @@ class _AddMealPageState extends State<AddMealPage> {
     );
 
     if (updated != null) {
-      widget.onEditMeal(meal, updated);
+      onEditMeal(meal, updated);
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final totalKcal = _sum((m) => m.kcal);
+    final totalProtein = _sum((m) => m.protein);
+    final totalCarbs = _sum((m) => m.carbs);
+    final totalFat = _sum((m) => m.fat);
+
+    final double progress = (totalKcal / calorieGoal).clamp(0.0, 1.0);
+    final double remaining = calorieGoal - totalKcal;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final ringSize = math.min(constraints.maxWidth * 0.55, 220.0);
+
+        return CustomScrollView(
+          slivers: [
+            SliverToBoxAdapter(
+              child: Card(
+                shadowColor: Colors.transparent,
+                margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      InkWell(
+                        onTap: onPickDay,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  _getFormattedDate(),
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(
+                                    fontSize: 30,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              const Icon(Icons.calendar_month_outlined),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Today\'s Calories',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: ringSize,
+                            height: ringSize,
+                            child: CircularProgressIndicator(
+                              value: progress,
+                              strokeWidth: 16,
+                              backgroundColor: Colors.grey.shade300,
+                              valueColor: const AlwaysStoppedAnimation<Color>(
+                                Colors.teal,
+                              ),
+                            ),
+                          ),
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _formatNumber(totalKcal, decimals: 0),
+                                style: TextStyle(
+                                  fontSize: ringSize * 0.19,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const Text(
+                                'calories consumed',
+                                style: TextStyle(fontSize: 16),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Goal: ${_formatNumber(calorieGoal, decimals: 0)}',
+                                style: const TextStyle(fontSize: 14),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        remaining >= 0
+                            ? '${_formatNumber(remaining, decimals: 0)} calories remaining'
+                            : '${_formatNumber(remaining.abs(), decimals: 0)} calories over goal',
+                        style: theme.textTheme.titleMedium,
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 20),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: [
+                          StatChip(
+                            label: 'Calories',
+                            value: totalKcal,
+                            unit: 'kcal',
+                          ),
+                          StatChip(
+                            label: 'Protein',
+                            value: totalProtein,
+                            unit: 'g',
+                          ),
+                          StatChip(
+                            label: 'Carbs',
+                            value: totalCarbs,
+                            unit: 'g',
+                          ),
+                          StatChip(
+                            label: 'Fat',
+                            value: totalFat,
+                            unit: 'g',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(child: Text('${mealsForDay.length} item(s)')),
+                          TextButton.icon(
+                            onPressed: mealsForDay.isEmpty
+                                ? null
+                                : () async {
+                              final ok = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  title: const Text('Clear this day?'),
+                                  content: Text(
+                                    'This will delete all entries for ${DateFormat('EEEE, MMMM d').format(selectedDay)}.',
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(ctx, false),
+                                      child: const Text('Cancel'),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () =>
+                                          Navigator.pop(ctx, true),
+                                      child: const Text('Delete all'),
+                                    ),
+                                  ],
+                                ),
+                              ) ??
+                                  false;
+
+                              if (ok) onClearAllForDay();
+                            },
+                            icon: const Icon(Icons.delete_forever_outlined),
+                            label: const Text('Clear day'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            if (mealsForDay.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      'No meals for this date.\nAdd meals in "Add a meal".',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.titleMedium,
+                    ),
+                  ),
+                ),
+              )
+            else
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                      (context, i) {
+                    final m = mealsForDay[i];
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Dismissible(
+                        key: ValueKey(
+                          '${m.name}-${m.addedAt.toIso8601String()}-$i',
+                        ),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
+                          alignment: Alignment.centerRight,
+                          padding: const EdgeInsets.only(right: 16),
+                          color: Colors.red.shade100,
+                          child: const Icon(Icons.delete),
+                        ),
+                        confirmDismiss: (_) async {
+                          return await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('Delete entry?'),
+                              content: Text("Delete '${m.name}'?"),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('Cancel'),
+                                ),
+                                ElevatedButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('Delete'),
+                                ),
+                              ],
+                            ),
+                          ) ??
+                              false;
+                        },
+                        onDismissed: (_) => onDeleteMeal(m),
+                        child: Card(
+                          child: ListTile(
+                            onTap: () => _showEditDialog(context, m),
+                            title: Text(m.name),
+                            subtitle: Text([
+                              if (m.brand != null && m.brand!.trim().isNotEmpty)
+                                'Brand: ${m.brand}',
+                              'Grams: ${_formatNumber(m.grams)}g',
+                              if (m.kcal != null)
+                                'Calories: ${_formatNumber(m.kcal!, decimals: 0)}',
+                              if (m.protein != null)
+                                'P: ${m.protein!.toStringAsFixed(1)}g',
+                              if (m.carbs != null)
+                                'C: ${m.carbs!.toStringAsFixed(1)}g',
+                              if (m.fat != null)
+                                'F: ${m.fat!.toStringAsFixed(1)}g',
+                              'Tap to edit',
+                            ].join(' • ')),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () => onDeleteMeal(m),
+                              tooltip: 'Delete',
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  childCount: mealsForDay.length,
+                ),
+              ),
+            const SliverToBoxAdapter(child: SizedBox(height: 12)),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class StatChip extends StatelessWidget {
+  final String label;
+  final double value;
+  final String unit;
+
+  const StatChip({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.unit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Chip(
+      label: Text('$label: ${value.toStringAsFixed(1)} $unit'),
+    );
+  }
+}
+
+class ProgressionPage extends StatelessWidget {
+  final List<Meal> meals;
+  final ProgressMetric selectedMetric;
+  final int windowOffset;
+  final ValueChanged<ProgressMetric> onMetricChanged;
+  final VoidCallback onPreviousWindow;
+  final VoidCallback onNextWindow;
+
+  const ProgressionPage({
+    super.key,
+    required this.meals,
+    required this.selectedMetric,
+    required this.windowOffset,
+    required this.onMetricChanged,
+    required this.onPreviousWindow,
+    required this.onNextWindow,
+  });
+
+  List<_WeeklyAverageData> _buildWeeklyAverages() {
+    final now = DateTime.now();
+    final currentWeekStart = _startOfWeek(now);
+
+    final DateTime windowStart = currentWeekStart.subtract(
+      Duration(days: windowOffset * 35 + 28),
+    );
+
+    final weeks = List.generate(5, (i) {
+      final DateTime start = windowStart.add(Duration(days: i * 7));
+      final DateTime end = start.add(const Duration(days: 6));
+
+      final Map<DateTime, double> totalsByDay = <DateTime, double>{};
+
+      for (final meal in meals) {
+        final DateTime day = _dateOnly(meal.addedAt);
+        if (day.isBefore(start) || day.isAfter(end)) continue;
+
+        totalsByDay[day] =
+            (totalsByDay[day] ?? 0.0) + selectedMetric.valueFromMeal(meal);
+      }
+
+      double weekTotal = 0.0;
+      for (int d = 0; d < 7; d++) {
+        final DateTime day = start.add(Duration(days: d));
+        weekTotal += totalsByDay[_dateOnly(day)] ?? 0.0;
+      }
+
+      final double average = weekTotal / 7.0;
+
+      return _WeeklyAverageData(
+        weekStart: start,
+        weekEnd: end,
+        average: average,
+      );
+    });
+
+    return weeks;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<_WeeklyAverageData> data = _buildWeeklyAverages();
+    final double maxY =
+    data.fold<double>(0.0, (max, e) => math.max(max, e.average));
+    final double chartMaxY = maxY <= 0.0 ? 10.0 : maxY * 1.25;
+
+    final DateTime newestWeekStart = _startOfWeek(DateTime.now()).subtract(
+      Duration(days: windowOffset * 35),
+    );
+    final DateTime oldestWeekStart =
+    newestWeekStart.subtract(const Duration(days: 28));
+
+    final String rangeText =
+        '${DateFormat('MMM d').format(oldestWeekStart)} - ${DateFormat('MMM d, y').format(newestWeekStart.add(const Duration(days: 6)))}';
+
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              alignment: WrapAlignment.spaceBetween,
+              children: [
+                DropdownButton<ProgressMetric>(
+                  value: selectedMetric,
+                  onChanged: (value) {
+                    if (value != null) onMetricChanged(value);
+                  },
+                  items: ProgressMetric.values
+                      .map(
+                        (metric) => DropdownMenuItem<ProgressMetric>(
+                      value: metric,
+                      child: Text(metric.label),
+                    ),
+                  )
+                      .toList(),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      onPressed: onPreviousWindow,
+                      icon: const Icon(Icons.chevron_left),
+                      tooltip: 'Previous 5 weeks',
+                    ),
+                    Text(
+                      rangeText,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    IconButton(
+                      onPressed: windowOffset == 0 ? null : onNextWindow,
+                      icon: const Icon(Icons.chevron_right),
+                      tooltip: 'Next 5 weeks',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            Expanded(
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 20, 12, 12),
+                  child: data.every((e) => e.average == 0.0)
+                      ? Center(
+                    child: Text(
+                      'No data for this 5-week window.',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                  )
+                      : BarChart(
+                    BarChartData(
+                      maxY: chartMaxY,
+                      alignment: BarChartAlignment.spaceAround,
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: false,
+                        horizontalInterval: chartMaxY / 5.0,
+                      ),
+                      borderData: FlBorderData(show: false),
+                      titlesData: FlTitlesData(
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 50,
+                            interval: chartMaxY / 5.0,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                _formatNumber(value, decimals: 0),
+                                style: const TextStyle(fontSize: 11),
+                              );
+                            },
+                          ),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 48,
+                            getTitlesWidget: (value, meta) {
+                              final int index = value.toInt();
+                              if (index < 0 || index >= data.length) {
+                                return const SizedBox.shrink();
+                              }
+                              final item = data[index];
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  DateFormat(
+                                    'MMM d',
+                                  ).format(item.weekStart),
+                                  style: const TextStyle(fontSize: 11),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      barTouchData: BarTouchData(
+                        enabled: true,
+                        touchTooltipData: BarTouchTooltipData(
+                          getTooltipItem:
+                              (group, groupIndex, rod, rodIndex) {
+                            final item = data[group.x.toInt()];
+                            return BarTooltipItem(
+                              '${DateFormat('MMM d').format(item.weekStart)} - ${DateFormat('MMM d').format(item.weekEnd)}\n'
+                                  'Avg: ${_formatNumber(item.average)} ${selectedMetric.unit}',
+                              const TextStyle(color: Colors.white),
+                            );
+                          },
+                        ),
+                      ),
+                      barGroups: List.generate(data.length, (index) {
+                        final item = data[index];
+                        return BarChartGroupData(
+                          x: index,
+                          barRods: [
+                            BarChartRodData(
+                              toY: item.average.toDouble(),
+                              width: 26.0,
+                              borderRadius: BorderRadius.circular(6),
+                              color: Colors.teal,
+                            ),
+                          ],
+                        );
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'Showing weekly average daily ${selectedMetric.label.toLowerCase()} for 5-week windows',
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 180,
+              child: ListView(
+                children: data
+                    .map(
+                      (item) => ListTile(
+                    dense: true,
+                    title: Text(
+                      '${DateFormat('MMM d').format(item.weekStart)} - ${DateFormat('MMM d, y').format(item.weekEnd)}',
+                    ),
+                    trailing: Text(
+                      '${_formatNumber(item.average)} ${selectedMetric.unit}/day',
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                )
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeeklyAverageData {
+  final DateTime weekStart;
+  final DateTime weekEnd;
+  final double average;
+
+  const _WeeklyAverageData({
+    required this.weekStart,
+    required this.weekEnd,
+    required this.average,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Add Meal Page — powered by USDA FoodData Central API
+// ---------------------------------------------------------------------------
+
+class AddMealPage extends StatefulWidget {
+  final void Function(Meal) onAddMeal;
+  final DateTime selectedDay;
+
+  const AddMealPage({
+    super.key,
+    required this.onAddMeal,
+    required this.selectedDay,
+  });
+
+  @override
+  State<AddMealPage> createState() => _AddMealPageState();
+}
+
+class _AddMealPageState extends State<AddMealPage> {
+  final _controller = TextEditingController();
+  bool _loading = false;
+  String? _error;
+  List<_UsdaFood> _results = const [];
+
+  static const _apiKey = 'ZrNhpjOTyWKFMWxLIp4f0mCz0gAqG0bPBRjRq24Z';
+
+  static final List<int> _gramOptions =
+  List<int>.generate(200, (index) => (index + 1) * 10);
+
+  Future<void> _search() async {
+    final q = _controller.text.trim();
+    if (q.isEmpty) return;
+
+    setState(() {
+      _loading = true;
+      _error = null;
+      _results = const [];
+    });
+
+    try {
+      final uri =
+      Uri.parse('https://api.nal.usda.gov/fdc/v1/foods/search').replace(
+        queryParameters: <String, String>{
+          'query': q,
+          'api_key': _apiKey,
+          'pageSize': '20',
+        },
+      );
+
+      final resp = await http.get(
+        uri,
+        headers: const {'Accept': 'application/json'},
+      );
+
+      if (resp.statusCode != 200) {
+        throw Exception('HTTP ${resp.statusCode}: ${resp.body}');
+      }
+
+      final decoded = jsonDecode(resp.body) as Map<String, dynamic>;
+      final foods = (decoded['foods'] as List?) ?? const [];
+
+      final parsed = foods
+          .map((f) => _UsdaFood.fromJson(f as Map<String, dynamic>))
+          .where((f) => f.description.trim().isNotEmpty)
+          .toList();
+
+      setState(() => _results = parsed);
+    } catch (e) {
+      setState(() => _error = 'Search failed: $e');
+    } finally {
+      setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _addFromResult(_UsdaFood f) async {
+    final grams = await _showGramPicker(context, food: f);
+    if (grams == null) return;
+
+    final now = DateTime.now();
+
+    final meal = Meal(
+      name: f.description,
+      brand: f.brandOwner,
+      barcode: f.gtinUpc,
+      grams: grams,
+      kcal100g: f.kcal100g,
+      protein100g: f.protein100g,
+      carbs100g: f.carbs100g,
+      fat100g: f.fat100g,
+      addedAt: DateTime(
+        widget.selectedDay.year,
+        widget.selectedDay.month,
+        widget.selectedDay.day,
+        now.hour,
+        now.minute,
+        now.second,
+        now.millisecond,
+        now.microsecond,
+      ),
+    );
+
+    widget.onAddMeal(meal);
+  }
+
+  Future<double?> _showGramPicker(
+      BuildContext context, {
+        required _UsdaFood food,
+      }) async {
+    int selectedIndex = 9;
+    final manualCtrl = TextEditingController(text: '100');
+
+    return showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 16,
+              bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  food.description,
+                  style: Theme.of(sheetCtx).textTheme.titleMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Choose grams',
+                  style: Theme.of(sheetCtx).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 180,
+                  child: CupertinoPicker(
+                    scrollController: FixedExtentScrollController(
+                      initialItem: selectedIndex,
+                    ),
+                    itemExtent: 36,
+                    useMagnifier: true,
+                    magnification: 1.05,
+                    onSelectedItemChanged: (index) {
+                      selectedIndex = index;
+                      manualCtrl.text = _gramOptions[index].toString();
+                    },
+                    children: _gramOptions
+                        .map((g) => Center(child: Text('$g g')))
+                        .toList(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: manualCtrl,
+                  keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'Or type grams',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.pop(sheetCtx),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          final grams = double.tryParse(manualCtrl.text.trim());
+                          if (grams == null || grams <= 0) return;
+                          Navigator.pop(sheetCtx, grams);
+                        },
+                        child: const Text('Add'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -679,201 +1177,81 @@ class _AddMealPageState extends State<AddMealPage> {
     super.dispose();
   }
 
-  Widget _buildTodaysFoodList(BuildContext context) {
-    final mealsForDay = widget.mealsForDay;
-
-    if (mealsForDay.isEmpty) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Text(
-            'No meals for this date yet.',
-            textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      children: [
-        Row(
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
           children: [
-            Text(
-              'Foods for ${_dayLabel(widget.selectedDay)}',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
-            const Spacer(),
-            TextButton.icon(
-              onPressed: () async {
-                final ok = await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Clear this day?'),
-                    content: Text(
-                      'This will delete all entries for ${_dayLabel(widget.selectedDay)}.',
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    decoration: InputDecoration(
+                      labelText:
+                      'Search food for ${DateFormat('MMM d').format(widget.selectedDay)}',
+                      border: const OutlineInputBorder(),
                     ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Delete all'),
-                      ),
-                    ],
+                    onSubmitted: (_) => _search(),
                   ),
-                ) ??
-                    false;
-
-                if (ok) widget.onClearAllForDay();
-              },
-              icon: const Icon(Icons.delete_forever_outlined),
-              label: const Text('Clear day'),
+                ),
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  onPressed: _loading ? null : _search,
+                  child: _loading
+                      ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                      : const Text('Search'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (_error != null)
+              Text(_error!, style: const TextStyle(color: Colors.red)),
+            if (!_loading && _error == null && _results.isEmpty)
+              Text(
+                'Search for something to see results.\nSelected day: ${DateFormat('EEEE, MMMM d').format(widget.selectedDay)}',
+                textAlign: TextAlign.center,
+              ),
+            const SizedBox(height: 8),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _results.length,
+                itemBuilder: (context, i) {
+                  final f = _results[i];
+                  return Card(
+                    child: ListTile(
+                      title: Text(f.description),
+                      subtitle: Text([
+                        if (f.brandOwner != null &&
+                            f.brandOwner!.trim().isNotEmpty)
+                          'Brand: ${f.brandOwner}',
+                        if (f.kcal100g != null)
+                          'kcal/100g: ${f.kcal100g!.toStringAsFixed(0)}',
+                        if (f.protein100g != null)
+                          'P/100g: ${f.protein100g!.toStringAsFixed(1)}g',
+                        if (f.carbs100g != null)
+                          'C/100g: ${f.carbs100g!.toStringAsFixed(1)}g',
+                        if (f.fat100g != null)
+                          'F/100g: ${f.fat100g!.toStringAsFixed(1)}g',
+                      ].join(' • ')),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.add_circle_outline),
+                        onPressed: () => _addFromResult(f),
+                        tooltip: 'Add meal',
+                      ),
+                    ),
+                  );
+                },
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: mealsForDay.length,
-          itemBuilder: (context, i) {
-            final m = mealsForDay[i];
-
-            return Dismissible(
-              key: ValueKey('${m.name}-${m.addedAt.toIso8601String()}-$i'),
-              direction: DismissDirection.endToStart,
-              background: Container(
-                alignment: Alignment.centerRight,
-                padding: const EdgeInsets.only(right: 16),
-                child: const Icon(Icons.delete),
-              ),
-              confirmDismiss: (_) async {
-                return await showDialog<bool>(
-                  context: context,
-                  builder: (ctx) => AlertDialog(
-                    title: const Text('Delete entry?'),
-                    content: Text("Delete '${m.name}'?"),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx, false),
-                        child: const Text('Cancel'),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(ctx, true),
-                        child: const Text('Delete'),
-                      ),
-                    ],
-                  ),
-                ) ??
-                    false;
-              },
-              onDismissed: (_) => widget.onDeleteMeal(m),
-              child: Card(
-                child: ListTile(
-                  onTap: () => _showEditDialog(context, m),
-                  title: Text(m.name),
-                  subtitle: Text([
-                    if (m.brand != null && m.brand!.trim().isNotEmpty)
-                      'Brand: ${m.brand}',
-                    'Grams: ${_formatNumber(m.grams)}g',
-                    if (m.kcal != null)
-                      'Calories: ${_formatNumber(m.kcal!, decimals: 0)}',
-                    if (m.protein != null)
-                      'P: ${m.protein!.toStringAsFixed(1)}g',
-                    if (m.carbs != null)
-                      'C: ${m.carbs!.toStringAsFixed(1)}g',
-                    if (m.fat != null)
-                      'F: ${m.fat!.toStringAsFixed(1)}g',
-                    'Tap to edit',
-                  ].join(' • ')),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => widget.onDeleteMeal(m),
-                    tooltip: 'Delete',
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: ListView(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: TextField(
-                  controller: _controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Search food (e.g., "oreo", "greek yogurt")',
-                    border: OutlineInputBorder(),
-                  ),
-                  onSubmitted: (_) => _search(),
-                ),
-              ),
-              const SizedBox(width: 10),
-              ElevatedButton(
-                onPressed: _loading ? null : _search,
-                child: _loading
-                    ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-                    : const Text('Search'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          if (_error != null)
-            Text(_error!, style: const TextStyle(color: Colors.red)),
-          if (!_loading && _error == null && _results.isEmpty)
-            const Text('Search for something to see results.'),
-          const SizedBox(height: 8),
-          if (_results.isNotEmpty)
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _results.length,
-              itemBuilder: (context, i) {
-                final f = _results[i];
-                return Card(
-                  child: ListTile(
-                    title: Text(f.description),
-                    subtitle: Text([
-                      if (f.brandOwner != null && f.brandOwner!.trim().isNotEmpty)
-                        'Brand: ${f.brandOwner}',
-                      if (f.kcal100g != null)
-                        'kcal/100g: ${f.kcal100g!.toStringAsFixed(0)}',
-                      if (f.protein100g != null)
-                        'P/100g: ${f.protein100g!.toStringAsFixed(1)}g',
-                      if (f.carbs100g != null)
-                        'C/100g: ${f.carbs100g!.toStringAsFixed(1)}g',
-                      if (f.fat100g != null)
-                        'F/100g: ${f.fat100g!.toStringAsFixed(1)}g',
-                    ].join(' • ')),
-                    trailing: IconButton(
-                      icon: const Icon(Icons.add_circle_outline),
-                      onPressed: () => _addFromResult(f),
-                      tooltip: 'Add meal',
-                    ),
-                  ),
-                );
-              },
-            ),
-          const SizedBox(height: 16),
-          _buildTodaysFoodList(context),
-        ],
       ),
     );
   }
@@ -910,10 +1288,7 @@ class _UsdaFood {
     return null;
   }
 
-  static double? _nutrientByName(
-      List<dynamic> nutrients,
-      List<String> names,
-      ) {
+  static double? _nutrientByName(List<dynamic> nutrients, List<String> names) {
     final lowerNames = names.map((e) => e.toLowerCase()).toList();
 
     for (final n in nutrients) {
