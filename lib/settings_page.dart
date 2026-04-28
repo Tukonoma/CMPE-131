@@ -1,50 +1,49 @@
 import 'package:flutter/material.dart';
+import 'app_theme.dart';
 
-class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key});
+class SettingsPage extends StatelessWidget {
+  final AppThemeMode selectedTheme;
+  final ValueChanged<AppThemeMode> onThemeChanged;
 
-  @override
-  State<SettingsPage> createState() => _SettingsPageState();
-}
-
-class _SettingsPageState extends State<SettingsPage> {
-  bool notificationsEnabled = true;
-  bool darkMode = false;
+  const SettingsPage({
+    super.key,
+    required this.selectedTheme,
+    required this.onThemeChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Settings'),
-        backgroundColor: Colors.blue,
-        foregroundColor: Colors.white,
       ),
-      body: ListView(
-        children: [
-          SwitchListTile(
-            title: const Text('Enable Notifications'),
-            value: notificationsEnabled,
-            onChanged: (value) {
-              setState(() {
-                notificationsEnabled = value;
-              });
-            },
-          ),
-          SwitchListTile(
-            title: const Text('Dark Mode'),
-            value: darkMode,
-            onChanged: (value) {
-              setState(() {
-                darkMode = value;
-              });
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.info_outline),
-            title: const Text('About'),
-            subtitle: const Text('App version 1.0'),
-          ),
-        ],
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Choose a color scheme',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 16),
+            DropdownButton<AppThemeMode>(
+              value: selectedTheme,
+              isExpanded: true,
+              items: AppThemeMode.values.map((theme) {
+                return DropdownMenuItem(
+                  value: theme,
+                  child: Text(theme.label),
+                );
+              }).toList(),
+              onChanged: (value) {
+                if (value != null) {
+                  onThemeChanged(value);
+                }
+              },
+            ),
+          ],
+        ),
       ),
     );
   }

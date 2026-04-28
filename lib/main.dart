@@ -6,29 +6,55 @@ import 'home_page.dart';
 import 'add_meal_page.dart';
 import 'progression_page.dart';
 import 'nutrition_models.dart';
+import 'app_theme.dart';
 
 void main() => runApp(const NavigationBarApp());
 
-class NavigationBarApp extends StatelessWidget {
-  const NavigationBarApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: NavigationExample(),
-    );
-  }
-}
-
 class NavigationExample extends StatefulWidget {
-  const NavigationExample({super.key});
+  final AppThemeMode selectedTheme;
+  final ValueChanged<AppThemeMode> onThemeChanged;
+
+  const NavigationExample({
+    super.key,
+    required this.selectedTheme,
+    required this.onThemeChanged,
+  });
 
   @override
   State<NavigationExample> createState() => _NavigationExampleState();
 }
 
+class NavigationBarApp extends StatefulWidget {
+  const NavigationBarApp({super.key});
+
+  @override
+  State<NavigationBarApp> createState() => _NavigationBarAppState();
+}
+
+class _NavigationBarAppState extends State<NavigationBarApp> {
+  AppThemeMode _selectedTheme = AppThemeMode.teal;
+
+  void _changeTheme(AppThemeMode newTheme) {
+    setState(() {
+      _selectedTheme = newTheme;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: AppThemes.getTheme(_selectedTheme),
+      home: NavigationExample(
+        selectedTheme: _selectedTheme,
+        onThemeChanged: _changeTheme,
+      ),
+    );
+  }
+}
+
 class _NavigationExampleState extends State<NavigationExample> {
+
   int currentPageIndex = 0;
 
   final List<Meal> _meals = [];
@@ -124,8 +150,6 @@ class _NavigationExampleState extends State<NavigationExample> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nutrition Tracker'),
-        backgroundColor: Colors.teal,
-        foregroundColor: Colors.white,
         centerTitle: true,
       ),
       drawer: Drawer(
@@ -133,7 +157,9 @@ class _NavigationExampleState extends State<NavigationExample> {
           padding: EdgeInsets.zero,
           children: [
             UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(color: Colors.teal),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary,
+              ),
               accountName: Text(
                 _displayName,
                 style: const TextStyle(fontWeight: FontWeight.bold),
@@ -160,7 +186,12 @@ class _NavigationExampleState extends State<NavigationExample> {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const SettingsPage()),
+                  MaterialPageRoute(
+                    builder: (_) => SettingsPage(
+                      selectedTheme: widget.selectedTheme,
+                      onThemeChanged: widget.onThemeChanged,
+                    ),
+                  ),
                 );
               },
             ),

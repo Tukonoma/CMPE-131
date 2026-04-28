@@ -156,6 +156,8 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+
     final totalKcal = _sum((m) => m.kcal);
     final totalProtein = _sum((m) => m.protein);
     final totalCarbs = _sum((m) => m.carbs);
@@ -183,6 +185,7 @@ class HomePage extends StatelessWidget {
           slivers: [
             SliverToBoxAdapter(
               child: Card(
+                color: colorScheme.primaryContainer,
                 shadowColor: Colors.transparent,
                 margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                 child: Padding(
@@ -201,39 +204,58 @@ class HomePage extends StatelessWidget {
                                 child: Text(
                                   _getFormattedDate(),
                                   textAlign: TextAlign.center,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontSize: 30,
                                     fontWeight: FontWeight.bold,
+                                    color: colorScheme.onPrimaryContainer,
                                   ),
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              const Icon(Icons.calendar_month_outlined),
+                              Icon(
+                                Icons.calendar_month_outlined,
+                                color: colorScheme.onPrimaryContainer,
+                              ),
                             ],
                           ),
                         ),
                       ),
                       const SizedBox(height: 20),
-                      DropdownButton<ProgressMetric>(
-                        value: selectedMetric,
-                        onChanged: (value) {
-                          if (value != null) onMetricChanged(value);
-                        },
-                        items: ProgressMetric.values
-                            .map(
-                              (m) => DropdownMenuItem(
-                            value: m,
-                            child: Text(m.label),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: colorScheme.secondaryContainer,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: DropdownButton<ProgressMetric>(
+                          value: selectedMetric,
+                          underline: const SizedBox(),
+                          dropdownColor: colorScheme.secondaryContainer,
+                          iconEnabledColor: colorScheme.onSecondaryContainer,
+                          style: TextStyle(
+                            color: colorScheme.onSecondaryContainer,
+                            fontSize: 16,
                           ),
-                        )
-                            .toList(),
+                          onChanged: (value) {
+                            if (value != null) onMetricChanged(value);
+                          },
+                          items: ProgressMetric.values
+                              .map(
+                                (m) => DropdownMenuItem(
+                              value: m,
+                              child: Text(m.label),
+                            ),
+                          )
+                              .toList(),
+                        ),
                       ),
                       const SizedBox(height: 12),
                       Text(
                         'Today\'s ${selectedMetric.label}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 24,
                           fontWeight: FontWeight.bold,
+                          color: colorScheme.onPrimaryContainer,
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -246,9 +268,10 @@ class HomePage extends StatelessWidget {
                             child: CircularProgressIndicator(
                               value: progress,
                               strokeWidth: 16,
-                              backgroundColor: Colors.grey.shade300,
-                              valueColor: const AlwaysStoppedAnimation<Color>(
-                                Colors.teal,
+                              backgroundColor:
+                              colorScheme.primary.withOpacity(0.18),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                colorScheme.primary,
                               ),
                             ),
                           ),
@@ -266,16 +289,23 @@ class HomePage extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: ringSize * 0.19,
                                   fontWeight: FontWeight.bold,
+                                  color: colorScheme.onPrimaryContainer,
                                 ),
                               ),
                               Text(
                                 '${selectedMetric.unit} consumed',
-                                style: const TextStyle(fontSize: 16),
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  color: colorScheme.onPrimaryContainer,
+                                ),
                               ),
                               const SizedBox(height: 8),
                               Text(
                                 'Goal: $goalText',
-                                style: const TextStyle(fontSize: 14),
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: colorScheme.onPrimaryContainer,
+                                ),
                                 textAlign: TextAlign.center,
                               ),
                             ],
@@ -287,7 +317,9 @@ class HomePage extends StatelessWidget {
                         remaining >= 0
                             ? '${formatNumber(remaining, decimals: selectedMetric == ProgressMetric.calories ? 0 : 1)} ${selectedMetric.unit} remaining'
                             : '${formatNumber(remaining.abs(), decimals: selectedMetric == ProgressMetric.calories ? 0 : 1)} ${selectedMetric.unit} over midpoint target',
-                        style: theme.textTheme.titleMedium,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: colorScheme.onPrimaryContainer,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 20),
@@ -321,7 +353,14 @@ class HomePage extends StatelessWidget {
                       const SizedBox(height: 12),
                       Row(
                         children: [
-                          Expanded(child: Text('${mealsForDay.length} item(s)')),
+                          Expanded(
+                            child: Text(
+                              '${mealsForDay.length} item(s)',
+                              style: TextStyle(
+                                color: colorScheme.onPrimaryContainer,
+                              ),
+                            ),
+                          ),
                           TextButton.icon(
                             onPressed: mealsForDay.isEmpty
                                 ? null
@@ -352,6 +391,9 @@ class HomePage extends StatelessWidget {
                             },
                             icon: const Icon(Icons.delete_forever_outlined),
                             label: const Text('Clear day'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: colorScheme.onPrimaryContainer,
+                            ),
                           ),
                         ],
                       ),
@@ -389,8 +431,11 @@ class HomePage extends StatelessWidget {
                         background: Container(
                           alignment: Alignment.centerRight,
                           padding: const EdgeInsets.only(right: 16),
-                          color: Colors.red.shade100,
-                          child: const Icon(Icons.delete),
+                          color: colorScheme.errorContainer,
+                          child: Icon(
+                            Icons.delete,
+                            color: colorScheme.onErrorContainer,
+                          ),
                         ),
                         confirmDismiss: (_) async =>
                         await showDialog<bool>(
@@ -413,6 +458,7 @@ class HomePage extends StatelessWidget {
                             false,
                         onDismissed: (_) => onDeleteMeal(m),
                         child: Card(
+                          color: colorScheme.surfaceContainerHighest,
                           child: ListTile(
                             onTap: () => _showEditDialog(context, m),
                             title: Text(m.name),
