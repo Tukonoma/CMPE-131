@@ -4,14 +4,8 @@ A nutrition logger capable of tracking macronutrients and calories.
 
 ## Getting Started
 
-This project is a starting point for a Flutter application.
+Download and set up flutter on Android Studio: https://developer.android.com/studio
 
-A few resources to get you started if this is your first Flutter project:
+Copy the link the repository and clone the repository
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+On the top right of  Android studio, click green play button to compile and run the code.
