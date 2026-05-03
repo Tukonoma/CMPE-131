@@ -1,16 +1,60 @@
-# nutrition_tracker
+# Nutrition Tracker
 
-A nutrition logger capable of tracking macronutrients and calories.
+A Flutter application for tracking daily macronutrients and calories. Set your personal metrics, log your meals, and monitor your nutrition goals with interactive charts.
 
-## Getting Started
+---
 
-Download and set up flutter on Android Studio: https://developer.android.com/studio
+## Features
 
-Copy the link the repository and clone the repository
+- Log daily calories and macronutrients
+- Calculate calorie goals from your body metrics
+- Visualize nutrition data with interactive charts
 
-On the top right of  Android studio, click green play button to compile and run the code.
+---
+
+## Prerequisites
+
+Before running this project, make sure you have the following installed:
+
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) - verify by running `flutter --version`
+- [Android Studio](https://developer.android.com/studio) with the Flutter and Dart plugins enabled
+
+To verify your full Flutter setup, run:
+
+```bash
+flutter doctor
+```
+
+Fix any issues reported before proceeding.
+
+---
+
+## Running the App
+
+1. Clone the repository:
+
+```bash
+git clone https://github.com/Tukonoma/CMPE-131.git
+```
+
+2. Open the cloned folder in Android Studio via **File > Open**
+
+3. Install dependencies:
+
+```bash
+flutter pub get
+```
+
+4. Select a device or emulator from the device dropdown, then run:
+
+```bash
+flutter run
+```
+
+---
 
 ## Using the App
 
-The temporary value for calories will be 2000 Kcal.
-Go to the account and set your metrics and the app will calculate your maintance calories.
+- On first launch, the calorie target defaults to **2000 kcal**
+- Go to the **Account** tab to enter your body metrics and calculate your personal maintenance calories
+- Use the home screen to log meals and track your daily intake
